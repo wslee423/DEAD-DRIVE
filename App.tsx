@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Dimensions,
   StatusBar,
+  Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -26,11 +27,13 @@ const BEST_SCORE_KEY = 'DEAD_DRIVE_BEST_SCORE';
 const CAR_TOP = SCREEN_H - CAR_BOTTOM - CAR_H;
 const CAR_BOTTOM_Y = SCREEN_H - CAR_BOTTOM;
 
-const DASH_HEIGHT = 22;
-const DASH_GAP = 22;
-const DASH_COUNT = Math.ceil(SCREEN_H / (DASH_HEIGHT + DASH_GAP));
+// 도로 스크롤 상수
+const DASH_H = 30;
+const DASH_GAP = 18;
+const DASH_CYCLE = DASH_H + DASH_GAP;
+const DASH_COUNT = Math.ceil(SCREEN_H / DASH_CYCLE) + 3;
 
-// ── 난이도 계산 (10초 단위로 레벨 상승) ──
+// 난이도 계산 (10초 단위로 레벨 상승)
 const LEVEL_UP_SECONDS = 10;
 
 function getLevel(seconds: number): number {
@@ -53,38 +56,132 @@ type Zombie = {
   y: number;    // top (px, 화면 위쪽 기준)
 };
 
-// ── 차선 분리선 ──
-function DashedLane({ x }: { x: number }) {
+// ── 스크롤 차선 분리선 ──
+function ScrollingLanes({ scrollY }: { scrollY: Animated.Value }) {
   return (
-    <>
-      {Array.from({ length: DASH_COUNT }).map((_, i) => (
-        <View
-          key={i}
-          style={{
-            position: 'absolute',
-            left: x - 1,
-            top: i * (DASH_HEIGHT + DASH_GAP),
-            width: 2,
-            height: DASH_HEIGHT,
-            backgroundColor: 'rgba(255,255,255,0.45)',
-          }}
-        />
+    <Animated.View
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        top: -DASH_CYCLE,
+        height: SCREEN_H + DASH_CYCLE * 2,
+        transform: [{ translateY: scrollY }],
+      }}
+    >
+      {Array.from({ length: DASH_COUNT }, (_, i) => (
+        <React.Fragment key={i}>
+          <View style={[styles.dashMark, { left: LANE_W - 1.5, top: i * DASH_CYCLE }]} />
+          <View style={[styles.dashMark, { left: LANE_W * 2 - 1.5, top: i * DASH_CYCLE }]} />
+        </React.Fragment>
       ))}
-    </>
+    </Animated.View>
   );
 }
 
 // ── 좀비 컴포넌트 ──
 function ZombieView({ zombie }: { zombie: Zombie }) {
   const left = zombie.lane * LANE_W + (LANE_W - ZOMBIE_W) / 2;
+  const headW = ZOMBIE_W * 0.6;
+  const headH = ZOMBIE_W * 0.5;
+  const bodyH = ZOMBIE_H - headH - 4;
+  const armW = ZOMBIE_W * 0.18;
+
   return (
-    <View
-      style={[
-        styles.zombie,
-        { left, top: zombie.y, width: ZOMBIE_W, height: ZOMBIE_H },
-      ]}
-    >
-      <Text style={styles.zombieText}>Z</Text>
+    <View style={{ position: 'absolute', left, top: zombie.y, width: ZOMBIE_W, height: ZOMBIE_H, alignItems: 'center' }}>
+      {/* 머리 */}
+      <View
+        style={{
+          width: headW,
+          height: headH,
+          backgroundColor: '#33cc44',
+          borderRadius: 7,
+          borderWidth: 1.5,
+          borderColor: '#1d8f2b',
+          justifyContent: 'center',
+          alignItems: 'center',
+          flexDirection: 'row',
+          gap: 5,
+        }}
+      >
+        {/* 빨간 눈 */}
+        <View style={{ width: 6, height: 6, backgroundColor: '#dd0000', borderRadius: 3 }} />
+        <View style={{ width: 6, height: 6, backgroundColor: '#dd0000', borderRadius: 3 }} />
+      </View>
+      {/* 팔 + 몸통 */}
+      <View style={{ flexDirection: 'row', marginTop: 3, width: ZOMBIE_W, height: bodyH, alignItems: 'flex-start' }}>
+        {/* 왼팔 */}
+        <View style={{ width: armW, height: bodyH * 0.6, backgroundColor: '#2bb83d', borderRadius: 4, marginTop: 3 }} />
+        {/* 몸통 */}
+        <View style={{ flex: 1, height: bodyH, backgroundColor: '#22962f', borderRadius: 4, borderWidth: 1, borderColor: '#196625' }} />
+        {/* 오른팔 */}
+        <View style={{ width: armW, height: bodyH * 0.6, backgroundColor: '#2bb83d', borderRadius: 4, marginTop: 3 }} />
+      </View>
+    </View>
+  );
+}
+
+// ── 자동차 컴포넌트 ──
+function CarView({ carLeft }: { carLeft: number }) {
+  return (
+    <View style={{ position: 'absolute', left: carLeft, bottom: CAR_BOTTOM, width: CAR_W, height: CAR_H }}>
+      {/* 차체 */}
+      <View style={{
+        position: 'absolute',
+        top: CAR_H * 0.22, left: 0, right: 0, bottom: 0,
+        backgroundColor: '#0077cc',
+        borderRadius: 6,
+      }} />
+      {/* 캐빈 */}
+      <View style={{
+        position: 'absolute',
+        top: CAR_H * 0.14,
+        left: CAR_W * 0.13, right: CAR_W * 0.13,
+        height: CAR_H * 0.5,
+        backgroundColor: '#004d99',
+        borderTopLeftRadius: 10, borderTopRightRadius: 10,
+      }} />
+      {/* 앞유리 (앞쪽 = 위) */}
+      <View style={{
+        position: 'absolute',
+        top: CAR_H * 0.17,
+        left: CAR_W * 0.19, right: CAR_W * 0.19,
+        height: CAR_H * 0.19,
+        backgroundColor: 'rgba(160,215,255,0.5)',
+        borderRadius: 3,
+      }} />
+      {/* 왼쪽 헤드라이트 */}
+      <View style={{
+        position: 'absolute',
+        top: 4, left: CAR_W * 0.06,
+        width: CAR_W * 0.26, height: 7,
+        backgroundColor: '#ffff99',
+        borderRadius: 3,
+      }} />
+      {/* 오른쪽 헤드라이트 */}
+      <View style={{
+        position: 'absolute',
+        top: 4, right: CAR_W * 0.06,
+        width: CAR_W * 0.26, height: 7,
+        backgroundColor: '#ffff99',
+        borderRadius: 3,
+      }} />
+      {/* 왼쪽 테일라이트 */}
+      <View style={{
+        position: 'absolute',
+        bottom: 4, left: CAR_W * 0.06,
+        width: CAR_W * 0.22, height: 6,
+        backgroundColor: '#ff3333',
+        borderRadius: 2,
+      }} />
+      {/* 오른쪽 테일라이트 */}
+      <View style={{
+        position: 'absolute',
+        bottom: 4, right: CAR_W * 0.06,
+        width: CAR_W * 0.22, height: 6,
+        backgroundColor: '#ff3333',
+        borderRadius: 2,
+      }} />
     </View>
   );
 }
@@ -107,6 +204,7 @@ export default function App() {
   const hpRef = useRef(MAX_HP);
   const gameOverRef = useRef(false);
   const bestScoreRef = useRef(0);
+  const roadScrollAnim = useRef(new Animated.Value(0)).current;
 
   // 앱 시작 시 최고 점수 로드
   useEffect(() => {
@@ -123,6 +221,21 @@ export default function App() {
   useEffect(() => {
     laneRef.current = lane;
   }, [lane]);
+
+  // 도로 스크롤 애니메이션 (게임오버 아닐 때 항상 실행)
+  useEffect(() => {
+    if (gameOver) return;
+
+    const anim = Animated.loop(
+      Animated.timing(roadScrollAnim, {
+        toValue: DASH_CYCLE,
+        duration: 180,
+        useNativeDriver: true,
+      })
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [gameOver]);
 
   const moveLeft = () => setLane((prev) => {
     const next = Math.max(0, prev - 1);
@@ -211,6 +324,7 @@ export default function App() {
 
   // ── Restart ──
   const handleRestart = () => {
+    roadScrollAnim.setValue(0);
     zombiesRef.current = [];
     frameRef.current = 0;
     nextIdRef.current = 0;
@@ -228,43 +342,52 @@ export default function App() {
   };
 
   const carLeft = lane * LANE_W + (LANE_W - CAR_W) / 2;
-  // 현재 점수가 최고 점수인지 (게임오버 시점)
   const isNewBest = score > 0 && score >= bestScore;
 
   return (
     <View style={styles.container}>
       <StatusBar hidden />
 
-      {/* Road */}
-      <View style={styles.road}>
-        <DashedLane x={LANE_W} />
-        <DashedLane x={LANE_W * 2} />
+      {/* 도로 배경 */}
+      <View style={styles.road} />
 
-        {zombies.map((z) => (
-          <ZombieView key={z.id} zombie={z} />
-        ))}
+      {/* 스크롤 차선 */}
+      <ScrollingLanes scrollY={roadScrollAnim} />
 
-        {/* Car */}
-        <View style={[styles.car, { left: carLeft, bottom: CAR_BOTTOM }]}>
-          <View style={styles.carRoof} />
-          <View style={styles.carBody} />
-        </View>
-      </View>
+      {/* 도로 가장자리 선 */}
+      <View style={styles.roadEdgeLeft} />
+      <View style={styles.roadEdgeRight} />
+
+      {/* 좀비 */}
+      {zombies.map((z) => (
+        <ZombieView key={z.id} zombie={z} />
+      ))}
+
+      {/* 자동차 */}
+      <CarView carLeft={carLeft} />
 
       {/* HUD (플레이 중) */}
       {started && !gameOver && (
         <View style={styles.hud}>
-          <Text style={styles.hudScore}>{score}s</Text>
-          <Text style={styles.hudHp}>
-            {Array.from({ length: MAX_HP }).map((_, i) =>
-              i < hp ? '♥' : '♡'
-            ).join(' ')}
-          </Text>
-          <Text style={styles.hudLevel}>Lv.{level}</Text>
+          <View style={styles.hudBg}>
+            <View style={styles.hudItem}>
+              <Text style={styles.hudLabel}>TIME</Text>
+              <Text style={styles.hudValue}>{score}s</Text>
+            </View>
+            <View style={styles.hudHpBox}>
+              {Array.from({ length: MAX_HP }).map((_, i) => (
+                <Text key={i} style={i < hp ? styles.hudHeartFull : styles.hudHeartEmpty}>♥</Text>
+              ))}
+            </View>
+            <View style={styles.hudItem}>
+              <Text style={styles.hudLabel}>LV</Text>
+              <Text style={styles.hudValueYellow}>{level}</Text>
+            </View>
+          </View>
         </View>
       )}
 
-      {/* Tap zones */}
+      {/* 탭 조작 영역 */}
       {started && !gameOver && (
         <>
           <TouchableOpacity
@@ -280,33 +403,34 @@ export default function App() {
         </>
       )}
 
-      {/* Start overlay */}
+      {/* 시작 화면 */}
       {!started && !gameOver && (
         <View style={styles.overlay}>
           <Text style={styles.title}>DEAD DRIVE</Text>
+          <Text style={styles.subtitle}>SURVIVE THE HORDE</Text>
           {bestScore > 0 && (
             <Text style={styles.overlayBest}>BEST  {bestScore}s</Text>
           )}
           <TouchableOpacity
-            style={styles.startBtn}
+            style={styles.actionBtn}
             onPress={() => setStarted(true)}
           >
-            <Text style={styles.startBtnText}>START</Text>
+            <Text style={styles.actionBtnText}>START</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Game Over overlay */}
+      {/* 게임오버 화면 */}
       {gameOver && (
         <View style={styles.overlay}>
           <Text style={styles.gameOverText}>GAME OVER</Text>
           <Text style={styles.finalScore}>{score}s</Text>
           {isNewBest && (
-            <Text style={styles.newBestText}>NEW BEST!</Text>
+            <Text style={styles.newBestText}>★  NEW BEST  ★</Text>
           )}
           <Text style={styles.overlayBest}>BEST  {bestScore}s</Text>
-          <TouchableOpacity style={styles.startBtn} onPress={handleRestart}>
-            <Text style={styles.startBtnText}>RESTART</Text>
+          <TouchableOpacity style={styles.actionBtn} onPress={handleRestart}>
+            <Text style={styles.actionBtnText}>RESTART</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -317,44 +441,36 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#111',
+    backgroundColor: '#0d0d0d',
   },
   road: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#222',
+    backgroundColor: '#1c1c1e',
   },
-  car: {
+  roadEdgeLeft: {
     position: 'absolute',
-    width: CAR_W,
-    height: CAR_H,
-    alignItems: 'center',
+    top: 0,
+    bottom: 0,
+    left: 3,
+    width: 3,
+    backgroundColor: '#ccaa00',
+    opacity: 0.55,
   },
-  carRoof: {
-    width: CAR_W * 0.6,
-    height: CAR_H * 0.4,
-    backgroundColor: '#005fa3',
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
-  },
-  carBody: {
-    width: CAR_W,
-    height: CAR_H * 0.6,
-    backgroundColor: '#0088dd',
-    borderRadius: 5,
-  },
-  zombie: {
+  roadEdgeRight: {
     position: 'absolute',
-    backgroundColor: '#2ecc40',
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#27ae60',
+    top: 0,
+    bottom: 0,
+    right: 3,
+    width: 3,
+    backgroundColor: '#ccaa00',
+    opacity: 0.55,
   },
-  zombieText: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '900',
+  dashMark: {
+    position: 'absolute',
+    width: 3,
+    height: DASH_H,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    borderRadius: 1.5,
   },
   tapZone: {
     position: 'absolute',
@@ -362,34 +478,60 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: SCREEN_W / 2,
   },
-  // HUD (점수 / HP / 레벨)
+  // HUD
   hud: {
     position: 'absolute',
     top: 20,
     left: 0,
     right: 0,
+    paddingHorizontal: 12,
+  },
+  hudBg: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
-  hudScore: {
-    fontSize: 22,
+  hudItem: {
+    alignItems: 'center',
+    minWidth: 52,
+  },
+  hudLabel: {
+    fontSize: 10,
     fontWeight: '700',
+    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 2,
+  },
+  hudValue: {
+    fontSize: 24,
+    fontWeight: '800',
     color: '#ffffff',
-    minWidth: 60,
+    lineHeight: 28,
   },
-  hudHp: {
-    fontSize: 26,
-    color: '#ff4444',
-    letterSpacing: 4,
-  },
-  hudLevel: {
-    fontSize: 22,
-    fontWeight: '700',
+  hudValueYellow: {
+    fontSize: 24,
+    fontWeight: '800',
     color: '#ffdd00',
-    minWidth: 60,
-    textAlign: 'right',
+    lineHeight: 28,
+  },
+  hudHpBox: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  hudHeartFull: {
+    fontSize: 24,
+    color: '#ff3333',
+    lineHeight: 30,
+  },
+  hudHeartEmpty: {
+    fontSize: 24,
+    color: 'rgba(255,80,80,0.25)',
+    lineHeight: 30,
   },
   // 오버레이 공통
   overlay: {
@@ -399,54 +541,74 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 48,
+    fontSize: 52,
     fontWeight: '900',
     color: '#ff2222',
-    letterSpacing: 4,
-    marginBottom: 16,
+    letterSpacing: 5,
     textShadowColor: '#ff0000',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 18,
+    textShadowRadius: 22,
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 4,
+    marginBottom: 36,
   },
   gameOverText: {
-    fontSize: 48,
+    fontSize: 46,
     fontWeight: '900',
     color: '#ff2222',
     letterSpacing: 4,
-    marginBottom: 12,
     textShadowColor: '#ff0000',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 18,
+    textShadowRadius: 20,
+    marginBottom: 10,
   },
   finalScore: {
-    fontSize: 40,
+    fontSize: 60,
     fontWeight: '800',
     color: '#ffffff',
     marginBottom: 8,
+    textShadowColor: 'rgba(255,255,255,0.25)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
   },
   newBestText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#ffdd00',
-    letterSpacing: 4,
+    letterSpacing: 3,
     marginBottom: 6,
+    textShadowColor: '#ffcc00',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
   },
   overlayBest: {
-    fontSize: 18,
-    color: '#aaaaaa',
-    letterSpacing: 2,
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.38)',
+    letterSpacing: 3,
     marginBottom: 48,
   },
-  startBtn: {
-    borderWidth: 2,
-    borderColor: '#ffffff',
+  actionBtn: {
+    backgroundColor: '#bb0000',
     paddingHorizontal: 52,
-    paddingVertical: 16,
+    paddingVertical: 18,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#ff4444',
+    elevation: 10,
+    shadowColor: '#ff0000',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 14,
   },
-  startBtnText: {
+  actionBtnText: {
     color: '#ffffff',
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 8,
   },
 });

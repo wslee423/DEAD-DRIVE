@@ -5,11 +5,13 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "platforms": [
-      "ios",
       "android"
     ],
-    "plugins": [
-      "expo-asset"
-    ]
+    "android": {
+      "package": "com.deadrive.game",
+      "adaptiveIcon": {
+        "backgroundColor": "#1c1c1e"
+      }
+    }
   }
 }
