@@ -11,6 +11,7 @@ import {
   Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Audio } from 'expo-av';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const LANE_W = SCREEN_W / 3;
@@ -43,8 +44,8 @@ function getLevel(seconds: number): number {
 }
 
 function getZombieSpeed(level: number): number {
-  // 기본 4, 레벨마다 +1, 최대 10
-  return Math.min(4 + (level - 1), 10);
+  // 기본 5, 레벨마다 +1, 최대 10
+  return Math.min(5 + (level - 1), 10);
 }
 
 function getSpawnEvery(level: number): number {
@@ -118,6 +119,7 @@ export default function App() {
   const [score, setScore] = useState(0);
   const [level, setLevel] = useState(1);
   const [bestScore, setBestScore] = useState(0);
+  const [muted, setMuted] = useState(false);
 
   const zombiesRef = useRef<Zombie[]>([]);
   const frameRef = useRef(0);
@@ -127,6 +129,106 @@ export default function App() {
   const gameOverRef = useRef(false);
   const bestScoreRef = useRef(0);
   const roadScrollAnim = useRef(new Animated.Value(0)).current;
+
+  // ── 오디오 refs ──
+  const bgmRef = useRef<Audio.Sound | null>(null);
+  const clickSfxRef = useRef<Audio.Sound | null>(null);
+  const hitSfxRef = useRef<Audio.Sound | null>(null);
+  const gameoverSfxRef = useRef<Audio.Sound | null>(null);
+  const mutedRef = useRef(false);
+  // 히트 사운드 중복 방지: 같은 프레임에 여러 번 재생 막기
+  const lastHitFrameRef = useRef(-1);
+
+  // ── 사운드 로드 (마운트 시 1회) ──
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+
+        const [{ sound: bgm }, { sound: click }, { sound: hit }, { sound: go }] =
+          await Promise.all([
+            Audio.Sound.createAsync(require('./sounds/bgm.mp3')),
+            Audio.Sound.createAsync(require('./sounds/click.mp3')),
+            Audio.Sound.createAsync(require('./sounds/hit.mp3')),
+            Audio.Sound.createAsync(require('./sounds/gameover.mp3')),
+          ]);
+
+        await bgm.setIsLoopingAsync(true);
+        await bgm.setVolumeAsync(0.72);
+        await click.setVolumeAsync(0.35);
+
+        if (alive) {
+          bgmRef.current = bgm;
+          clickSfxRef.current = click;
+          hitSfxRef.current = hit;
+          gameoverSfxRef.current = go;
+        } else {
+          bgm.unloadAsync().catch(() => {});
+          click.unloadAsync().catch(() => {});
+          hit.unloadAsync().catch(() => {});
+          go.unloadAsync().catch(() => {});
+        }
+      } catch (e) {
+        console.warn('[Audio] load error:', e);
+      }
+    })();
+
+    return () => {
+      alive = false;
+      bgmRef.current?.unloadAsync().catch(() => {});
+      clickSfxRef.current?.unloadAsync().catch(() => {});
+      hitSfxRef.current?.unloadAsync().catch(() => {});
+      gameoverSfxRef.current?.unloadAsync().catch(() => {});
+    };
+  }, []);
+
+  // ── 오디오 헬퍼 ──
+  const playBgm = () => {
+    (async () => {
+      try {
+        if (!bgmRef.current) return;
+        try { await bgmRef.current.stopAsync(); } catch (_) {}
+        await bgmRef.current.setPositionAsync(0);
+        if (!mutedRef.current) {
+          await bgmRef.current.playAsync();
+        }
+      } catch (e) {}
+    })();
+  };
+
+  const stopBgm = () => {
+    (async () => {
+      try { await bgmRef.current?.stopAsync(); } catch (e) {}
+    })();
+  };
+
+  const playSfx = (ref: React.MutableRefObject<Audio.Sound | null>) => {
+    if (!ref.current || mutedRef.current) return;
+    (async () => {
+      try {
+        await ref.current!.setPositionAsync(0);
+        await ref.current!.playAsync();
+      } catch (e) {}
+    })();
+  };
+
+  const toggleMute = () => {
+    const newMuted = !mutedRef.current;
+    mutedRef.current = newMuted;
+    setMuted(newMuted);
+    (async () => {
+      try {
+        if (!bgmRef.current) return;
+        if (newMuted) {
+          await bgmRef.current.pauseAsync();
+        } else if (started && !gameOver) {
+          await bgmRef.current.playAsync();
+        }
+      } catch (e) {}
+    })();
+  };
 
   // 앱 시작 시 최고 점수 로드
   useEffect(() => {
@@ -159,16 +261,22 @@ export default function App() {
     return () => anim.stop();
   }, [gameOver]);
 
-  const moveLeft = () => setLane((prev) => {
-    const next = Math.max(0, prev - 1);
-    laneRef.current = next;
-    return next;
-  });
-  const moveRight = () => setLane((prev) => {
-    const next = Math.min(2, prev + 1);
-    laneRef.current = next;
-    return next;
-  });
+  const moveLeft = () => {
+    playSfx(clickSfxRef);
+    setLane((prev) => {
+      const next = Math.max(0, prev - 1);
+      laneRef.current = next;
+      return next;
+    });
+  };
+  const moveRight = () => {
+    playSfx(clickSfxRef);
+    setLane((prev) => {
+      const next = Math.min(2, prev + 1);
+      laneRef.current = next;
+      return next;
+    });
+  };
 
   // 최고 점수 저장
   const saveBestScore = (newScore: number) => {
@@ -212,6 +320,7 @@ export default function App() {
       // 충돌 판정
       let currentHp = hpRef.current;
       const surviving: Zombie[] = [];
+      let hitThisFrame = false;
 
       for (const z of zombiesRef.current) {
         if (z.y >= SCREEN_H) continue; // 화면 밖 제거
@@ -221,9 +330,16 @@ export default function App() {
 
         if (sameLane && yOverlap) {
           currentHp -= 1;
+          hitThisFrame = true;
         } else {
           surviving.push(z);
         }
+      }
+
+      // 히트 사운드: 프레임당 1회
+      if (hitThisFrame && lastHitFrameRef.current !== currentFrame) {
+        lastHitFrameRef.current = currentFrame;
+        playSfx(hitSfxRef);
       }
 
       zombiesRef.current = surviving;
@@ -238,6 +354,8 @@ export default function App() {
         saveBestScore(currentScore);
         setGameOver(true);
         clearInterval(interval);
+        stopBgm();
+        playSfx(gameoverSfxRef);
       }
     }, FRAME_MS);
 
@@ -246,6 +364,16 @@ export default function App() {
 
   // ── Restart ──
   const handleRestart = () => {
+    // gameover 사운드 즉시 정리
+    (async () => {
+      try {
+        await gameoverSfxRef.current?.stopAsync();
+        await gameoverSfxRef.current?.setPositionAsync(0);
+      } catch (e) {}
+    })();
+
+    playSfx(clickSfxRef);
+
     roadScrollAnim.setValue(0);
     zombiesRef.current = [];
     frameRef.current = 0;
@@ -253,6 +381,7 @@ export default function App() {
     hpRef.current = MAX_HP;
     gameOverRef.current = false;
     laneRef.current = 1;
+    lastHitFrameRef.current = -1;
 
     setZombies([]);
     setHp(MAX_HP);
@@ -260,6 +389,15 @@ export default function App() {
     setScore(0);
     setLevel(1);
     setGameOver(false);
+    setStarted(true);
+
+    playBgm();
+  };
+
+  // ── Start ──
+  const handleStart = () => {
+    playSfx(clickSfxRef);
+    playBgm();
     setStarted(true);
   };
 
@@ -339,7 +477,7 @@ export default function App() {
           )}
           <TouchableOpacity
             style={styles.actionBtn}
-            onPress={() => setStarted(true)}
+            onPress={handleStart}
           >
             <Text style={styles.actionBtnText}>START</Text>
           </TouchableOpacity>
@@ -360,6 +498,11 @@ export default function App() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* 음소거 토글 (항상 표시) */}
+      <TouchableOpacity style={styles.muteBtn} onPress={toggleMute} activeOpacity={0.75}>
+        <Text style={styles.muteBtnText}>{muted ? '✕♪' : '♪'}</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -536,5 +679,25 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '800',
     letterSpacing: 8,
+  },
+  // 음소거 버튼
+  muteBtn: {
+    position: 'absolute',
+    bottom: 28,
+    right: 18,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 22,
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    zIndex: 999,
+  },
+  muteBtnText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
