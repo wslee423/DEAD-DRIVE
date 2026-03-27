@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
+  Image,
+  ImageBackground,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
@@ -13,12 +15,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const LANE_W = SCREEN_W / 3;
 
-const CAR_W = LANE_W * 0.48;
-const CAR_H = CAR_W * 1.7;
+const CAR_W = LANE_W * 0.74;
+const CAR_H = CAR_W * 1.8;
 const CAR_BOTTOM = 90;
 
-const ZOMBIE_W = LANE_W * 0.46;
-const ZOMBIE_H = ZOMBIE_W * 1.2;
+const ZOMBIE_W = LANE_W * 0.70;
+const ZOMBIE_H = ZOMBIE_W * 1.4;
 const FRAME_MS = 16;
 const MAX_HP = 3;
 const BEST_SCORE_KEY = 'DEAD_DRIVE_BEST_SCORE';
@@ -82,41 +84,13 @@ function ScrollingLanes({ scrollY }: { scrollY: Animated.Value }) {
 // ── 좀비 컴포넌트 ──
 function ZombieView({ zombie }: { zombie: Zombie }) {
   const left = zombie.lane * LANE_W + (LANE_W - ZOMBIE_W) / 2;
-  const headW = ZOMBIE_W * 0.6;
-  const headH = ZOMBIE_W * 0.5;
-  const bodyH = ZOMBIE_H - headH - 4;
-  const armW = ZOMBIE_W * 0.18;
-
   return (
-    <View style={{ position: 'absolute', left, top: zombie.y, width: ZOMBIE_W, height: ZOMBIE_H, alignItems: 'center' }}>
-      {/* 머리 */}
-      <View
-        style={{
-          width: headW,
-          height: headH,
-          backgroundColor: '#33cc44',
-          borderRadius: 7,
-          borderWidth: 1.5,
-          borderColor: '#1d8f2b',
-          justifyContent: 'center',
-          alignItems: 'center',
-          flexDirection: 'row',
-          gap: 5,
-        }}
-      >
-        {/* 빨간 눈 */}
-        <View style={{ width: 6, height: 6, backgroundColor: '#dd0000', borderRadius: 3 }} />
-        <View style={{ width: 6, height: 6, backgroundColor: '#dd0000', borderRadius: 3 }} />
-      </View>
-      {/* 팔 + 몸통 */}
-      <View style={{ flexDirection: 'row', marginTop: 3, width: ZOMBIE_W, height: bodyH, alignItems: 'flex-start' }}>
-        {/* 왼팔 */}
-        <View style={{ width: armW, height: bodyH * 0.6, backgroundColor: '#2bb83d', borderRadius: 4, marginTop: 3 }} />
-        {/* 몸통 */}
-        <View style={{ flex: 1, height: bodyH, backgroundColor: '#22962f', borderRadius: 4, borderWidth: 1, borderColor: '#196625' }} />
-        {/* 오른팔 */}
-        <View style={{ width: armW, height: bodyH * 0.6, backgroundColor: '#2bb83d', borderRadius: 4, marginTop: 3 }} />
-      </View>
+    <View style={{ position: 'absolute', left, top: zombie.y, width: ZOMBIE_W, height: ZOMBIE_H }}>
+      <Image
+        source={require('./assets/images/zombie.png')}
+        style={{ width: '100%', height: '100%' }}
+        resizeMode="contain"
+      />
     </View>
   );
 }
@@ -125,63 +99,11 @@ function ZombieView({ zombie }: { zombie: Zombie }) {
 function CarView({ carLeft }: { carLeft: number }) {
   return (
     <View style={{ position: 'absolute', left: carLeft, bottom: CAR_BOTTOM, width: CAR_W, height: CAR_H }}>
-      {/* 차체 */}
-      <View style={{
-        position: 'absolute',
-        top: CAR_H * 0.22, left: 0, right: 0, bottom: 0,
-        backgroundColor: '#0077cc',
-        borderRadius: 6,
-      }} />
-      {/* 캐빈 */}
-      <View style={{
-        position: 'absolute',
-        top: CAR_H * 0.14,
-        left: CAR_W * 0.13, right: CAR_W * 0.13,
-        height: CAR_H * 0.5,
-        backgroundColor: '#004d99',
-        borderTopLeftRadius: 10, borderTopRightRadius: 10,
-      }} />
-      {/* 앞유리 (앞쪽 = 위) */}
-      <View style={{
-        position: 'absolute',
-        top: CAR_H * 0.17,
-        left: CAR_W * 0.19, right: CAR_W * 0.19,
-        height: CAR_H * 0.19,
-        backgroundColor: 'rgba(160,215,255,0.5)',
-        borderRadius: 3,
-      }} />
-      {/* 왼쪽 헤드라이트 */}
-      <View style={{
-        position: 'absolute',
-        top: 4, left: CAR_W * 0.06,
-        width: CAR_W * 0.26, height: 7,
-        backgroundColor: '#ffff99',
-        borderRadius: 3,
-      }} />
-      {/* 오른쪽 헤드라이트 */}
-      <View style={{
-        position: 'absolute',
-        top: 4, right: CAR_W * 0.06,
-        width: CAR_W * 0.26, height: 7,
-        backgroundColor: '#ffff99',
-        borderRadius: 3,
-      }} />
-      {/* 왼쪽 테일라이트 */}
-      <View style={{
-        position: 'absolute',
-        bottom: 4, left: CAR_W * 0.06,
-        width: CAR_W * 0.22, height: 6,
-        backgroundColor: '#ff3333',
-        borderRadius: 2,
-      }} />
-      {/* 오른쪽 테일라이트 */}
-      <View style={{
-        position: 'absolute',
-        bottom: 4, right: CAR_W * 0.06,
-        width: CAR_W * 0.22, height: 6,
-        backgroundColor: '#ff3333',
-        borderRadius: 2,
-      }} />
+      <Image
+        source={require('./assets/images/car.png')}
+        style={{ width: '100%', height: '100%' }}
+        resizeMode="contain"
+      />
     </View>
   );
 }
@@ -349,7 +271,11 @@ export default function App() {
       <StatusBar hidden />
 
       {/* 도로 배경 */}
-      <View style={styles.road} />
+      <ImageBackground
+        source={require('./assets/images/road.png')}
+        style={styles.road}
+        resizeMode="cover"
+      />
 
       {/* 스크롤 차선 */}
       <ScrollingLanes scrollY={roadScrollAnim} />

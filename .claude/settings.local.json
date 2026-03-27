@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(npm install:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(find D:/study/Claude_study/claude-code-mastery/DEAD-DRIVE -name *.png -o -name *.jpg -o -name *.jpeg -o -name *.webp)",
+      "Bash(node -e \":*)"
     ]
   }
 }
