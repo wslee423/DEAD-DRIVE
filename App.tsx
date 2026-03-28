@@ -188,12 +188,12 @@ export default function App() {
   const playBgm = () => {
     (async () => {
       try {
-        if (!bgmRef.current) return;
-        try { await bgmRef.current.stopAsync(); } catch (_) {}
+        if (!bgmRef.current || mutedRef.current) return;
+        const status = await bgmRef.current.getStatusAsync();
+        if (!status.isLoaded) return;
+        if (status.isPlaying) return; // 이미 재생 중이면 중복 재생 방지
         await bgmRef.current.setPositionAsync(0);
-        if (!mutedRef.current) {
-          await bgmRef.current.playAsync();
-        }
+        await bgmRef.current.playAsync();
       } catch (e) {}
     })();
   };

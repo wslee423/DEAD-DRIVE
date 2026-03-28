@@ -4,7 +4,10 @@
       "Bash(npm install:*)",
       "Bash(npx tsc:*)",
       "Bash(find D:/study/Claude_study/claude-code-mastery/DEAD-DRIVE -name *.png -o -name *.jpg -o -name *.jpeg -o -name *.webp)",
-      "Bash(node -e \":*)"
+      "Bash(node -e \":*)",
+      "Bash(npx expo:*)",
+      "Bash(node -e \"JSON.parse\\(require\\(''fs''\\).readFileSync\\(''app.json'',''utf8''\\)\\); console.log\\(''app.json: VALID JSON''\\)\")",
+      "Bash(node -e \"JSON.parse\\(require\\(''fs''\\).readFileSync\\(''eas.json'',''utf8''\\)\\); console.log\\(''eas.json: VALID JSON''\\)\")"
     ]
   }
 }
